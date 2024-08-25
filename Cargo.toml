@@ -1,0 +1,11 @@
+[package]
+name = "krajc_macros"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+syn = { version = "1.0", features = ["full"] }
+quote = "1.0"
+
+[lib]
+proc-macro = true  # Mark this as a proc-macro library
