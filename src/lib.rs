@@ -1,5 +1,3 @@
-#![deny(unused_imports)]
-
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, AttributeArgs, ItemFn};
@@ -105,60 +103,115 @@ pub fn res_derive(input: TokenStream) -> TokenStream {
 
     impl_res(&ast)
 }
+
+#[proc_macro]
+pub fn impl_uuid(input: TokenStream) -> TokenStream {
+    // Parse the input as a Path (which can represent full paths like `crate::ecs::systems::SomeStruct`)
+    let input = parse_macro_input!(input as syn::Path);
+
+    // Convert the full path to a string
+    let path_string = quote!(#input).to_string();
+
+    // Use a fixed namespace UUID for consistency
+    let namespace_uuid = uuid::Uuid::NAMESPACE_DNS; // You can use any of the available namespaces
+    let uuid = uuid::Uuid::new_v5(&namespace_uuid, path_string.as_bytes()).to_string();
+
+    // Extract the last segment as the type name for the impl block
+    let type_name = input.segments.last().unwrap().ident.clone();
+
+    // Generate the implementation of the AbiTypeId trait for the given type
+    let gen = quote! {
+        impl crate::AbiTypeId for #type_name {
+            fn uuid() -> &'static str {
+                #uuid
+            }
+        }
+    };
+
+    // Convert the generated code into a TokenStream and return it
+    gen.into()
+}
+
+#[proc_macro_derive(Uuid)]
+pub fn uuid_derive(input: TokenStream) -> TokenStream {
+    // Parse the input as a Path (which can represent full paths like `crate::ecs::systems::SomeStruct`)
+    let input = parse_macro_input!(input as syn::Path);
+
+    // Convert the full path to a string
+    let path_string = quote!(#input).to_string();
+
+    // Use a fixed namespace UUID for consistency
+    let namespace_uuid = uuid::Uuid::NAMESPACE_DNS; // You can use any of the available namespaces
+    let uuid = uuid::Uuid::new_v5(&namespace_uuid, path_string.as_bytes()).to_string();
+
+    // Extract the last segment as the type name for the impl block
+    let type_name = input.segments.last().unwrap().ident.clone();
+
+    // Generate the implementation of the AbiTypeId trait for the given type
+    let gen = quote! {
+        impl crate::AbiTypeId for #type_name {
+            fn uuid() -> &'static str {
+                #uuid
+            }
+        }
+    };
+
+    // Convert the generated code into a TokenStream and return it
+    gen.into()
+}
 fn impl_res(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let gen = quote! {
-    use crate::FromEngine as _;
+        use crate::FromEngine as _;
 
-    /*use crate::EngineRuntime;
-    use crate::TypedAddr;
-    use std::any::TypeId;*/
+        use crate::AbiTypeId as _;
 
+        krajc_macros::impl_uuid!(#name);
 
-    impl crate::engine_runtime::schedule_manager::system_params::system_resource::EngineResource for #name {
-        fn get_mut(engine: &mut crate::EngineRuntime) -> &'static mut Self {
-            crate::TypedAddr::new({
-                let op = engine.static_resource_map.get_mut(&std::any::TypeId::of::<Self>());
-                match op {
-                    Some(val) => *val,
-                    None => {
-                        let new = Box::leak(Box::new(#name::from_engine(crate::dupe(engine))));
-                        let addr = crate::TypedAddr::new_with_ref(new).addr;
-                        engine.static_resource_map.insert(std::any::TypeId::of::<Self>(), addr);
-                        addr
+        impl crate::engine_runtime::schedule_manager::system_params::system_resource::EngineResource for #name {
+            fn get_mut(engine: &mut crate::EngineRuntime) -> &'static mut Self {
+                crate::TypedAddr::new({
+                    let op = engine.static_resource_map.get_mut(&Self::uuid());
+                    match op {
+                        Some(val) => *val,
+                        None => {
+                            let new = Box::leak(Box::new(#name::from_engine(crate::dupe(engine))));
+                            let addr = crate::TypedAddr::new_with_ref(new).addr;
+                            engine.static_resource_map.insert(Self::uuid(), addr);
+                            addr
+                        }
                     }
-                }
-            })
-            .get()
-        }
-        fn get(engine: &mut crate::EngineRuntime) -> &'static Self {
-            crate::TypedAddr::new({
-                let op = engine.static_resource_map.get_mut(&std::any::TypeId::of::<Self>());
-                match op {
-                    Some(val) => *val,
-                    None => {
-                        let new = Box::leak(Box::new(#name::from_engine(crate::dupe(engine))));
-                        let addr = crate::TypedAddr::new_with_ref(new).addr;
-                        engine.static_resource_map.insert(std::any::TypeId::of::<Self>(), addr);
-                        addr
+                })
+                .get()
+            }
+            fn get(engine: &mut crate::EngineRuntime) -> &'static Self {
+                crate::TypedAddr::new({
+                    let op = engine.static_resource_map.get_mut(&Self::uuid());
+                    match op {
+                        Some(val) => *val,
+                        None => {
+                            let new = Box::leak(Box::new(#name::from_engine(crate::dupe(engine))));
+                            let addr = crate::TypedAddr::new_with_ref(new).addr;
+                            engine.static_resource_map.insert(Self::uuid(), addr);
+                            addr
+                        }
                     }
-                }
-            })
-            .get()
-        }
-        fn get_no_init(engine: &crate::EngineRuntime) -> &'static Self {
-            crate::TypedAddr::new({
-                let op = engine.static_resource_map.get(&std::any::TypeId::of::<Self>());
-                match op {
-                    Some(val) => *val,
-                    None => {
-                        panic!("read an uninited resoruce without in get_no_init()");
+                })
+                .get()
+            }
+            fn get_no_init(engine: &crate::EngineRuntime) -> &'static Self {
+                crate::TypedAddr::new({
+                    let op = engine.static_resource_map.get(&Self::uuid());
+                    match op {
+                        Some(val) => *val,
+                        None => {
+                            panic!("read an uninited resoruce without in get_no_init()");
+                        }
                     }
-                }
-            })
-            .get()
+                })
+                .get()
+            }
         }
-    }
 
     };
     gen.into()
